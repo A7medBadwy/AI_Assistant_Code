@@ -1,0 +1,15 @@
+fastapi>=0.115
+uvicorn[standard]>=0.30
+python-multipart>=0.0.9
+faster-whisper>=1.0
+av>=11,<19
+datasets>=3.0
+langchain-core>=0.3
+langchain-community>=0.3
+langchain-openai>=0.2
+langchain-qdrant>=0.2
+qdrant-client>=1.12
+sentence-transformers>=3.0
+python-dotenv>=1.0
+itsdangerous>=2.2
+requests>=2.32

@@ -1,2 +1,5 @@
 .env
 .vscode
+__pycache__/
+data/analysis_datasets/
+data/auth_users.sqlite3

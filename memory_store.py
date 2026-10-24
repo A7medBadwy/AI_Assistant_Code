@@ -1,22 +1,34 @@
 
-from langchain_classic.vectorstores import Chroma
+import uuid
+
 from langchain_core.documents import Document
-from langchain_community.embeddings import HuggingFaceBgeEmbeddings
+from langchain_qdrant import QdrantVectorStore
+from qdrant_client.http.models import Distance, VectorParams
+
+from dataset import client as shared_client, embedding_model
 
 
-DB_PATH = "./data/chroma_database"
+DB_PATH = "./data/qdrant_database"
 COLLECTION_NAME = "user_verified_solutions"
 
-embedding_model = HuggingFaceBgeEmbeddings(
-    model_name="sentence-transformers/all-MiniLM-L6-v2",
-    model_kwargs={"device": "cpu"},
-    encode_kwargs={"normalize_embeddings": True},
-)
+# Reuse the same Qdrant client instance so multiple modules do not lock the same local database path.
+client = shared_client
 
-vectorstore = Chroma(
+# Ensure the personal-solution collection exists in the shared database.
+if not client.collection_exists(COLLECTION_NAME):
+    embedding_size = len(embedding_model.embed_query("test"))
+    client.create_collection(
+        collection_name=COLLECTION_NAME,
+        vectors_config=VectorParams(
+            size=embedding_size,
+            distance=Distance.COSINE,
+        ),
+    )
+
+vectorstore = QdrantVectorStore(
+    client=client,
     collection_name=COLLECTION_NAME,
-    persist_directory=DB_PATH,
-    embedding_function=embedding_model,
+    embedding=embedding_model,
 )
 
 
@@ -26,15 +38,13 @@ def save_solution(
     language: str = "python",
     validation_status: str = "passed",
 ) -> str:
-    """Store a validated solution in ChromaDB."""
+    """Store a validated solution in Qdrant."""
 
     if not task.strip() or not code.strip():
         raise ValueError("Task and code must not be empty.")
 
     if validation_status != "passed":
         raise ValueError("Only validated solutions can be stored.")
-
-    import uuid
 
     solution_id = str(uuid.uuid4())
 
@@ -60,7 +70,7 @@ def save_solution(
 
 
 def search_solutions(query: str, k: int = 3) -> list:
-    """Retrieve previously stored solutions."""
+    """Retrieve previously stored solutions from Qdrant."""
 
     if not query.strip():
         return []
@@ -70,36 +80,33 @@ def search_solutions(query: str, k: int = 3) -> list:
 
 """if __name__ == "__main__":
     print("User solution memory is ready.")
-    print("Stored solutions:", vectorstore._collection.count())
 
+    print(
+        "Stored solutions:",
+        client.count(
+            collection_name=COLLECTION_NAME,
+            exact=True,
+        ).count,
+    )
 
+    task = "Write a Python function that adds two numbers."
+    code = "def add(a, b):\n    return a + b"
+    solution_id = save_solution(
+        task=task,
+        code=code,
+        language="python",
+        validation_status="passed",
+    )
 
-task = "Write a Python function that adds two numbers."
+    print("Saved solution ID:", solution_id)
 
-code = """""""
-def add(a, b):
-    return a + b
-"""
+    results = search_solutions(
+        "Create a function to sum two numbers.",
+        k=3,
+    )
 
-"""# This example is for testing only.
-# In the full application, call this after validation
-# and explicit user confirmation.
-solution_id = save_solution(
-    task=task,
-    code=code,
-    language="python",
-    validation_status="passed",
-)
-
-print("Saved solution ID:", solution_id)
-
-results = search_solutions(
-    "Create a function to sum two numbers.",
-    k=3,
-)
-
-for doc in results:
-    print("\n--- Retrieved solution ---")
-    print(doc.page_content)
-    print(doc.metadata)
-"""
+    for doc in results:
+        print("\n--- Retrieved solution ---")
+        print(doc.page_content)
+        print(doc.metadata)
+        """
